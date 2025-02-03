@@ -18,6 +18,51 @@ using Xunit;
 
 namespace AutoMapper.OData.EFCore.Tests
 {
+    public class Organization
+    {
+        public int Id { get; set; }
+        public virtual ICollection<OrganizationIdentity> Identities { get; set; }
+        public virtual ICollection<OrganizationName> Names { get; set; }
+    }
+
+    public class OrganizationName
+    {
+        public int Id { get; set; }
+        public int LangId { get; set; }
+        public string Value { get; set; }
+    }
+
+    public class OrganizationIdentity
+    {
+        public int Id { get; set; }
+        public string Value { get; set; }
+        public int TypeId { get; set; }
+        public int OrganizationId { get; set; }
+        public Organization Organization { get; set; }
+    }
+
+    public class OrganizationDto
+    {
+        public int Id { get; set; }
+        public virtual ICollection<OrganizationIdentityDto> Identities { get; set; }
+        public virtual ICollection<OrganizationNameDto> Names { get; set; }
+    }
+
+    public class OrganizationNameDto
+    {
+        public int Id { get; set; }
+        public int LangId { get; set; }
+        public string Value { get; set; }
+    }
+
+    public class OrganizationIdentityDto
+    {
+        public int Id { get; set; }
+        public string Value { get; set; }
+        public int TypeId { get; set; }
+        public OrganizationDto Organization { get; set; }
+    }
+
     public class GetQueryTests : IClassFixture<GetQueryTestsFixture>
     {
         private readonly GetQueryTestsFixture _fixture;
@@ -33,11 +78,38 @@ namespace AutoMapper.OData.EFCore.Tests
         #endregion Fields
 
         [Fact]
+        public async Task OrganizationIdentitiesWithNestedOrganizationNames()
+        {            
+            string odataQuery = "/OrganizationIdentity?$select=Id&$expand=Organization($select=Id;$expand=Names($select=Id,LangId,Value;$filter=LangId eq 1))";
+            var query = GetOrganizationIdentitiesWithNestedOrganizationNames();
+
+            Assert.Equal(2, query.First().Organization.Names.Count);
+            Assert.Single(query.First().Organization.Names, n => n.LangId == 1);
+
+            var result = (await GetAsync<OrganizationIdentityDto, OrganizationIdentity>(odataQuery, query)).ToList();
+            Assert.Single(result.First().Organization.Names);
+        }
+
+        private IQueryable<OrganizationIdentity> GetOrganizationIdentitiesWithNestedOrganizationNames()
+        {
+            var organization1 = new Organization() { Id = 1 };
+            var name1 = new OrganizationName() { Id = 1, LangId = 1, Value = "Value (lang1)" };
+            var name2 = new OrganizationName() { Id = 2, LangId = 2, Value = "Value (lang2)" };
+            organization1.Names = new[] { name1, name2 };
+
+            var identity1 = new OrganizationIdentity() { Id = 1, OrganizationId = organization1.Id, Organization = organization1, Value = "id1", TypeId = 1 };
+            var identity2 = new OrganizationIdentity() { Id = 2, OrganizationId = organization1.Id, Organization = organization1, Value = "id2", TypeId = 2 };
+            organization1.Identities = new[] { identity2 };
+
+            return new[] { identity1, identity2 }.AsQueryable();
+        }
+
+        [Fact]
         public void IsConfigurationValid()
         {
             serviceProvider.GetRequiredService<IConfigurationProvider>().AssertConfigurationIsValid();
         }
-        
+
         [Fact]
         public async Task OpsTenantSearch()
         {
@@ -52,7 +124,7 @@ namespace AutoMapper.OData.EFCore.Tests
                 Assert.Equal("One", collection.First().Name);
             }
         }
-        
+
         [Fact]
         public async Task OpsTenantSearchAndFilter()
         {
@@ -151,7 +223,7 @@ namespace AutoMapper.OData.EFCore.Tests
             {
                 Assert.Equal(2, collection.Count);
                 Assert.Empty(collection.First().Buildings);
-                Assert.Empty(collection.Last().Buildings);                
+                Assert.Empty(collection.Last().Buildings);
             }
         }
 
@@ -265,7 +337,7 @@ namespace AutoMapper.OData.EFCore.Tests
                 Assert.Equal("Two", collection.First().Name);
             }
         }
-        
+
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
@@ -277,7 +349,7 @@ namespace AutoMapper.OData.EFCore.Tests
             {
                 ODataSettings = new ODataSettings { AlwaysSortByPrimaryKey = alwaysSortByPk }
             };
-            
+
             Test(Get<OpsTenant, TMandator>(query, GetMandators(), querySettings: querySettings));
             Test(await GetAsync<OpsTenant, TMandator>(query, GetMandators(), querySettings: querySettings));
             Test(await GetUsingCustomNameSpace<OpsTenant, TMandator>(query, GetMandators(), querySettings: querySettings));
@@ -289,7 +361,7 @@ namespace AutoMapper.OData.EFCore.Tests
                     .Select(x => x.Identity)
                     .OrderByDescending(identity => identity)
                     .ToList();
-                
+
                 if (alwaysSortByPk)
                 {
                     Assert.True(collection
@@ -304,7 +376,7 @@ namespace AutoMapper.OData.EFCore.Tests
                 }
             }
         }
-        
+
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
@@ -315,7 +387,7 @@ namespace AutoMapper.OData.EFCore.Tests
             {
                 ODataSettings = new ODataSettings { AlwaysSortByPrimaryKey = alwaysSortByPk }
             };
-            
+
             // Test multiple scenarios
             Test(Get<OpsTenant, TMandator>(query, GetMandators(), querySettings: querySettings));
             Test(await GetAsync<OpsTenant, TMandator>(query, GetMandators(), querySettings: querySettings));
@@ -864,7 +936,7 @@ namespace AutoMapper.OData.EFCore.Tests
                 Assert.Equal(2, collection.Last().Buildings.Count);
             }
         }
-        
+
         [Fact]
         public async Task OpsTenantOrderByFilteredCount()
         {
@@ -925,7 +997,7 @@ namespace AutoMapper.OData.EFCore.Tests
                 Assert.Equal("Leeds", collection.Last().Builder.City.Name);
             }
         }
-        
+
         private IQueryable<TMandator> GetMandators()
         {
             return new TMandator[]
@@ -1289,7 +1361,7 @@ namespace AutoMapper.OData.EFCore.Tests
                 Assert.Equal(2, collection.First().Products.First().AlternateAddresses.Count());
             }
         }
-
+        
         [Fact]
         public async Task FilteringOnRoot_ChildCollection_AndChildCollectionOfChildCollection_WithNoMatches_SortRoot_AndChildCollection_AndChildCollectionOfChildCollection()
         {
